@@ -1,0 +1,297 @@
+---
+title: "Análise Estatística sobre IAI 2020"
+author: "Reinaldo Zezela"
+date: "14/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1.0 Introdução
+
+
+## 2.0 Análise Descritiva
+
+
+### 2.1 Carregar as Bibliotecas necessárias
+
+```{r}
+# loading the required libraries
+
+# data manipulation
+library(tidyverse)
+
+# read excel files
+library(readxl)
+
+library(data.table)
+library(DT)
+library(reactable)
+
+```
+
+
+### 2.2 Carregar os dados
+
+```{r}
+listagem_tbl <-
+    read.csv(file = "00_data/Exported_Listagem.csv", header = TRUE, sep = ",")
+
+listagem_tbl <-
+    listagem_tbl %>% drop_na(PROV)
+    
+
+
+# listagem_tbl[listagem_tbl$PROV == 8 & listagem_tbl$DIST == 12 & !is.na(listagem_tbl$EASTING), ]
+
+listagem_tbl %>% glimpse()
+
+```
+
+
+Carregar os dados sobre Amostras.
+
+```{r}
+amostra_harmonizada_tbl <- read_excel("00_data/amostra_harmonizada_v2.xls")
+# View(amostra_harmonizada_tbl)
+
+amostra_harmonizada_tbl %>% glimpse()
+```
+
+
+Juntar as tabelas entre Listagem e Amostra.
+
+```{r}
+# Joining tables
+
+amostra_modificada_tbl <- amostra_harmonizada_tbl[ , 2:12]
+
+amostra_modificada_tbl <- amostra_modificada_tbl %>% unique()
+
+
+listagem_joined_tbl <-
+    listagem_tbl %>%
+    left_join(amostra_modificada_tbl,
+              by = c("LI_IAIID" = "ibsa_id"))
+
+listagem_joined_tbl %>% glimpse()
+
+# remove misclassified
+listagem_joined_tbl <- listagem_joined_tbl[!is.na(listagem_joined_tbl$CLASSIF), ]
+
+listagem_joined_tbl <- listagem_joined_tbl[!is.na(listagem_joined_tbl$EASTING), ]
+
+listagem_joined_tbl %>% glimpse()
+
+```
+
+
+### 2.3 Explorar os dados
+
+
+Obter o numero de AE's a AF's listados por Provincia
+```{r}
+
+# contar numeros de AE's e AF's listados
+report_tmp1_tbl <- 
+listagem_joined_tbl %>%
+    group_by(provincia, distrito) %>%
+    summarise(num_AE = n_distinct(LI_IAIID),
+              num_AF = n()) %>%
+    ungroup() %>% 
+    arrange(num_AF)
+
+report_tmp1_tbl
+```
+
+Contar os tipos de Exploracao por Provincia
+```{r}
+# contar os tipos de exploracao por provincia
+report_tmp2_tbl <-     
+listagem_joined_tbl %>%
+        # filter(!is.na(CLASSIF)) %>% 
+    count(provincia, distrito, CLASSIF) %>%
+    filter(!is.na(provincia)) %>% 
+    pivot_wider(names_from = CLASSIF, values_from = n, values_fill = list(n = 0))
+
+report_tmp2_tbl %>% glimpse()
+
+report_tmp2_tbl <- report_tmp2_tbl[ , -6]
+
+report_tmp2_tbl
+
+```
+
+Criar Reports
+```{r}
+# report
+stat_tbl <-
+    report_tmp1_tbl %>%
+    inner_join(report_tmp2_tbl, by = c("provincia", "distrito"))
+
+
+stat_tbl$provincia <- factor(stat_tbl$provincia, levels = c("Niassa", "Cabo Delgado", "Nampula", "Zambezia", "Tete", "Manica", "Sofala", "Inhambane", "Gaza", "Maputo Provincia"))
+
+stat_tbl 
+    
+```
+
+
+Agrupar os dados por Provincia
+```{r}
+stat_prov_tbl <- 
+stat_tbl %>% 
+    group_by(provincia) %>% 
+    summarise(total_AE = sum(num_AE),
+              total_AF = sum(num_AF),
+              total_PE = sum(PE),
+              total_ME = sum(ME),
+              total_GE = sum(GE)) %>% 
+    ungroup()
+
+colSums(stat_prov_tbl[ , 2:6])
+```
+
+```{r}
+stat_prov_tbl
+```
+
+
+
+```{r}
+datatable(stat_prov_tbl)
+```
+
+
+Agregado por distrito
+```{r}
+stat_distrito_tbl <- 
+stat_tbl %>% 
+    group_by(provincia, distrito) %>% 
+    summarise(total_AE = sum(num_AE),
+              total_AF = sum(num_AF),
+              total_PE = sum(PE),
+              total_ME = sum(ME),
+              total_GE = sum(GE)) %>% 
+    ungroup()
+
+stat_distrito_tbl
+```
+
+
+```{r}
+datatable(stat_distrito_tbl)
+```
+
+
+
+
+### 2.3 Explorar os dados: Reactable
+
+```{r}
+reactable(stat_prov_tbl)
+
+reactable(
+    stat_prov_tbl,
+    defaultPageSize = 11,
+    columns = list(
+        provincia = colDef(footer = "Total"),
+        # total_AF = colDef(footer = function(values) sprintf("%.f", sum(values)))
+        # total_AF = colDef(footer = function(values) sprintf("%.0f", sum(values)))
+        total_AE = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        ),
+        total_AF = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        ),
+        total_PE = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        ),
+        total_ME = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        ),
+        total_GE = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        )
+    ),
+    defaultColDef = colDef(footerStyle = list(fontWeight = "bold"))
+    
+)
+```
+
+
+reactable: agregar por distrito
+```{r}
+reactable(stat_distrito_tbl)
+```
+
+```{r}
+reactable(
+    stat_distrito_tbl,
+    defaultPageSize = 26,
+    columns = list(
+        provincia = colDef(footer = "Total"),
+        # total_AF = colDef(footer = function(values) sprintf("%.f", sum(values)))
+        # total_AF = colDef(footer = function(values) sprintf("%.0f", sum(values)))
+        total_AE = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        ),
+        total_AF = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        ),
+        total_PE = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        ),
+        total_ME = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        ),
+        total_GE = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        )
+    ),
+    defaultColDef = colDef(footerStyle = list(fontWeight = "bold"))
+    
+)
+```
+
+
+
+Obter totais
+```{r}
+report_tmp2_tbl$total <- report_tmp2_tbl$GE + report_tmp2_tbl$PE + report_tmp2_tbl$ME
+
+report_tmp2_tbl[ order(report_tmp2_tbl$total), ]
+```
+
+
+
+## 3.0 Visualização dos Dados
+
+
+
+
+
+
+
