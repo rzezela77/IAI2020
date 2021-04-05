@@ -1,0 +1,395 @@
+---
+title: 'Análise de Dados: Inquérito Agrário Integrado 2020'
+author: "Reinaldo Zezela"
+date: "28/03/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1.0 Introdução
+
+Inquérito Agrário Integrado 2020
+
+## 2.0 Análise Descritiva de Dados
+
+
+### 2.1 Carregar as bibliotecas necessárias
+
+```{r}
+library(tidyverse) # for data manipulation
+
+# loading libraries
+library(haven) # for import stata data
+
+library(reactable) # for tabulate data
+
+library(apexcharter) # for data visualization
+
+```
+
+
+
+### 2.2 Carregar os dados
+
+Carregar os dados da entrevista seccao A.
+
+```{r}
+# loading data section A
+ibsa_sec_a_dat <- read_dta("00_data/sec_a_20210331.dta")
+View(ibsa_sec_a_dat)
+```
+
+
+
+### 2.3 Examinar os dados
+
+```{r}
+# examine the data
+ibsa_sec_a_dat %>% glimpse()
+
+```
+
+Converter os tipos de dados
+
+```{r}
+# convert data type
+ibsa_sec_a_dat$a10 <- as.Date(ibsa_sec_a_dat$a10, "%d/%m/%Y")
+
+ibsa_sec_a_dat %>% glimpse()
+```
+
+
+
+Obter sumario
+```{r}
+# getting the summary
+ibsa_sec_a_dat %>% summary
+
+```
+
+
+Verificar registos cujo data de entrevista eh igual a NULL
+```{r}
+# Remover registos cujo data de entrevista eh igual a NULL
+ibsa_sec_a_dat <- ibsa_sec_a_dat[ !is.na(ibsa_sec_a_dat$a10), ]
+
+
+# remover registos cujo data de entrevista seja inferior ao ano 2021
+ibsa_sec_a_dat <- ibsa_sec_a_dat[ !lubridate::year(ibsa_sec_a_dat$a10) < 2021 | ibsa_sec_a_dat$a10 > Sys.Date() , ]
+
+ibsa_sec_a_dat %>% summary
+
+```
+
+
+### 2.4 Carregar os dados sobre Amostras
+
+```{r}
+library(readxl)
+amostra_harmonizada_tbl <- read_excel("00_data/amostra_harmonizada_v2.xls")
+
+# View(amostra_harmonizada_tbl)
+
+amostra_harmonizada_tbl %>% glimpse()
+```
+
+
+
+### 2.4 Manipulação dos dados
+
+1) Passo: Juntar as tabelas entre ibsa2020 e Amostra.
+
+```{r}
+
+# Joining tables
+
+amostra_modificada_tbl <- amostra_harmonizada_tbl[ , 2:12]
+
+amostra_modificada_tbl <- amostra_modificada_tbl %>% unique()
+
+amostra_modificada_tbl$provincia <- factor(amostra_modificada_tbl$provincia, levels = c("Niassa", "Cabo Delgado", "Nampula", "Zambezia", "Tete", "Manica", "Sofala", "Inhambane", "Gaza", "Maputo Provincia"))
+
+
+ibsa_sec_a_joined_tbl <-
+    ibsa_sec_a_dat %>%
+    left_join(amostra_modificada_tbl,
+              by = c("upa" = "ibsa_id"))
+
+ibsa_sec_a_joined_tbl %>% glimpse()
+
+```
+
+
+Contar numeros de AE's entrevistados
+
+```{r}
+# exemplo de um caso sem duplicados
+ibsa_sec_a_joined_tbl[ibsa_sec_a_joined_tbl$upa == 1592, ] 
+```
+
+
+Verificar UPA sem provincia
+```{r}
+ibsa_sec_a_joined_tbl[ is.na(ibsa_sec_a_joined_tbl$provincia), c(1, 2, 3)] %>% unique()
+```
+
+
+```{r}
+contar_upa_provincia_tbl <-
+    ibsa_sec_a_joined_tbl %>%
+    group_by(provincia, distrito) %>%
+    summarise(num_UPA = n_distinct(upa)) %>%
+    ungroup()
+
+contar_upa_provincia_tbl 
+
+```
+
+
+
+
+
+## 3.0 Visualização dos Dados
+
+
+```{r}
+# performance
+
+# AE entrevistadas
+upa_provincia_entrevistadas_tbl <-
+    contar_upa_provincia_tbl %>%
+    group_by(provincia) %>%
+    summarise(no_AE_entrevistadas = sum(num_UPA)) %>%
+    ungroup() 
+
+upa_provincia_entrevistadas_tbl
+
+# AE planificadas
+AE_planificadas_tbl <-
+    amostra_modificada_tbl %>%
+    group_by(provincia) %>%
+    summarise(no_AE_planificada = n()) %>% 
+    ungroup()
+
+
+# AE_planificadas_tbl
+
+
+entrevistas_performance_tbl <- cbind(upa_provincia_entrevistadas_tbl, AE_planificadas_tbl)
+
+entrevistas_performance_tbl <- entrevistas_performance_tbl[ , -3]
+
+entrevistas_performance_tbl$percent <- round((entrevistas_performance_tbl$no_AE_entrevistadas/entrevistas_performance_tbl$no_AE_planificada)*100, 2)
+
+entrevistas_performance_tbl
+
+
+# reactable
+reactable(
+    entrevistas_performance_tbl,
+    defaultPageSize = 11,
+    columns = list(
+        provincia = colDef(footer = "Total"),
+        # total_AF = colDef(footer = function(values) sprintf("%.f", sum(values)))
+        # total_AF = colDef(footer = function(values) sprintf("%.0f", sum(values)))
+        no_AE_entrevistadas = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        ),
+        no_AE_planificada = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        ),
+        percent = colDef(
+            footer = function(values) {
+                format(mean(values),  nsmall = 1, big.mark = ",")
+            }
+        )
+    ),
+    defaultColDef = colDef(footerStyle = list(fontWeight = "bold"))
+    
+)
+```
+
+Performance: número de AE's entrevistadas vs número de AE's planificadas
+
+```{r}
+apex(
+    data = entrevistas_performance_tbl[order(entrevistas_performance_tbl$percent, decreasing = TRUE),],
+    type = "bar",
+    aes(x = provincia, y = percent), height = "500px"
+) %>%
+    ax_title(text = "Performance: número de AE's entrevistadas vs número de AE's planificadas") %>%
+    ax_subtitle(text = "IAI 2020") %>%
+    ax_dataLabels(enabled = TRUE) %>% 
+    ax_xaxis(title = list(text = "Percentagem de Execução (%)"))
+# ax_dataLabels(enabled = TRUE, dropShadow(enabled=TRUE))
+```
+
+Performance: número de AE's entrevistadas vs número de AE's planificadas
+
+Comparação com a Média Geral
+```{r}
+# Comparação com a Média Geral
+apex(
+    data = entrevistas_performance_tbl,
+    type = "column",
+    aes(x = provincia, y = percent),
+    height = "400px"
+) %>%
+    add_hline(value = mean(entrevistas_performance_tbl$percent),
+              label = "Média Geral",
+              dash = 2) %>% 
+    ax_title(text = "Performance: número de AE's entrevistadas vs número de AE's planificadas") %>%
+    ax_subtitle(text = "IAI 2020") %>%
+    ax_dataLabels(enabled = TRUE) %>% 
+    ax_xaxis(title = list(text = "Percentagem de Execução (%)"))
+# ax_dataLabels(enabled = TRUE, dropShadow(enabled=TRUE))
+```
+
+
+### 3.1 Tendencia
+
+```{r}
+daily_interview_tbl <-
+    ibsa_sec_a_joined_tbl %>%
+    # filter(A10 >= as.Date('2021-01-01')) %>% 
+    group_by(created_at = a10, provincia, prov) %>%
+    summarise(no_entrevistas = n()) %>%
+    ungroup()
+
+daily_interview_tbl
+```
+
+
+Mostrar graficamente, número diário de Entrevistas em todo País.
+```{r}
+plot_country_tbl <- 
+daily_interview_tbl %>% 
+    group_by(created_at) %>% 
+    summarise(total_entrevistas = sum(no_entrevistas)) %>% 
+    ungroup()
+
+
+apex(plot_country_tbl, aes(x =created_at, y= total_entrevistas), "column", height = "400px") %>% 
+    # ax_dataLabels(enabled = TRUE, dropShadow = TRUE) %>%
+    ax_dataLabels(enabled = TRUE) %>% 
+    ax_title(text = "Número diário de Entrevistas em todo País") %>%
+    ax_subtitle(text = "IAI 2020") %>%
+    ax_xaxis(title = list(text = "Data")) %>% 
+    ax_yaxis(title = list(text = "Numero de Entrevistas")) %>% 
+    add_hline(value = mean(plot_country_tbl$total_entrevistas),
+              label = "Média diária",
+              dash = 2)
+```
+
+
+
+Mostrar graficamente, número diário de Entrevistas por provincia.
+
+```{r}
+plot_data <- daily_interview_tbl[ daily_interview_tbl$prov == 10 & daily_interview_tbl$created_at <= Sys.Date(), ]
+
+apex(plot_data, aes(x =created_at, y= no_entrevistas), "column", height = "400px") %>% 
+    # ax_dataLabels(enabled = TRUE, dropShadow = TRUE) %>%
+    ax_dataLabels(enabled = TRUE) %>% 
+    ax_title(text = paste("Número diário de Entrevistas:", unique(plot_data$provincia))) %>%
+    ax_subtitle(text = "IAI 2020") %>%
+    ax_xaxis(title = list(text = "Data")) %>% 
+    ax_yaxis(title = list(text = "Numero de Entrevistas")) %>% 
+    add_hline(value = mean(plot_data$no_entrevistas),
+              label = "Média diária",
+              dash = 2)
+```
+
+Mostrar os resultados graficamente, usando ggplot 
+
+```{r}
+# ggplot by category
+
+ggplot(data = daily_interview_tbl, aes(x = created_at, y = no_entrevistas, fill = provincia)) +
+    
+    # geometries
+    geom_col() +
+    # geom_label(aes(label = scales::comma(no_entrevistas))) +
+    geom_smooth(method = 'lm', se = FALSE) +
+    
+    # facet
+    facet_wrap( ~ provincia, scales = "free_y") +
+    
+    # formatting
+    scale_y_continuous(labels = scales::comma)
+```
+
+
+```{r}
+# Total de Entrevistas por Provincia
+
+total_entrevistas_prov_tbl <- 
+    ibsa_sec_a_joined_tbl %>%
+    # filter(a10 >= as.Date('2021-01-01')) %>% 
+    group_by(provincia) %>%
+    summarise(no_entrevistas = n()) %>%
+    ungroup()
+
+reactable(
+    total_entrevistas_prov_tbl,
+    defaultPageSize = 11,
+    columns = list(
+        provincia = colDef(footer = "Total"),
+        # total_AF = colDef(footer = function(values) sprintf("%.f", sum(values)))
+        # total_AF = colDef(footer = function(values) sprintf("%.0f", sum(values)))
+        no_entrevistas = colDef(
+            footer = function(values) {
+                format(sum(values),  nsmall = 1, big.mark = ",")
+            }
+        )
+    ),
+    defaultColDef = colDef(footerStyle = list(fontWeight = "bold"))
+    
+)
+
+```
+
+## 4.0 Tipo de Exploração
+
+```{r}
+library(labelled)
+
+# Pie
+apex(
+    data = count(ibsa_sec_a_dat, a06),
+    mapping = aes(x = to_factor(a06), y = n),
+    type = "pie", height = "400px"
+) %>%
+    ax_plotOptions(
+        pie = pie_opts(customScale = 0.5)
+    ) %>% 
+    ax_title(text = "Tipo de Exploração em todo País") %>% 
+    ax_subtitle(text = "IAI 2020")
+```
+
+
+Tipo de Exploracao por Provincia
+```{r}
+tipo_exploracao_tbl <-
+    ibsa_sec_a_dat %>%
+    count(prov, a06) 
+
+# Column
+apex(
+    data = tipo_exploracao_tbl,
+    mapping = aes(x = to_factor(prov), y = n, group = to_factor(a06)),
+    type = "column", height = "400px"
+) %>% 
+    ax_dataLabels(enabled = TRUE) %>% 
+    ax_title(text = "Tipo de Exploração por Provincia") %>% 
+    ax_subtitle(text = "IAI 2020")
+```
+
+
