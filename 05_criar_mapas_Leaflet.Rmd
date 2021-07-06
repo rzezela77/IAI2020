@@ -1,0 +1,428 @@
+---
+title: "Criar Mapas de Produção Agricola"
+author: "Reinaldo Zezela"
+date: "21/05/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1.0 Criar Mapas usando Leaflet e Shapefiles
+
+Carregar as bibliotecas necessárias.
+```{r}
+# load libraries
+library(leaflet) # create maps
+library(rgdal) # for read shapefile
+library(tidyverse) # for data manipulation
+library(haven) # for importing data from Stata
+library(htmltools) # for html
+```
+
+### 1.1 Importar shapefiles
+```{r}
+
+# adding shapefiles
+moz_province <- readOGR("shiny_app/00_data/Provincias/Provincias.shp")
+
+moz_district <- readOGR("shiny_app/00_data/Distritos/Distritos.shp")
+```
+
+### 1.2 Examinar os dados
+
+Distritos
+```{r}
+
+moz_district %>% glimpse()
+
+```
+
+visualizar dados do shapefiles
+```{r}
+moz_district@data
+```
+
+## 1.3 Adicionar Tiles e Shapefiles
+```{r}
+# adding Provider Tiles and shapefiles
+m <- leaflet() %>% 
+    #addProviderTiles(providers$Stamen.Toner) %>% 
+    addProviderTiles(providers$CartoDB.PositronNoLabels)  %>%
+    setView(lng = 35.529562, lat = -18.665695, zoom = 4) %>% 
+    addPolygons(data = moz_district,
+                color = "#660000",
+                # color = "white",
+                weight = 1,
+                smoothFactor = 1)
+
+m
+```
+
+## 2.0 Importar dados da Producao Agricola
+```{r}
+# Dados da Seccao G
+ibsa_sec_g_dat <- read_dta("shiny_app/00_data/sec_g.dta")
+
+ibsa_sec_g_dat %>% glimpse()
+```
+
+### 2.1 Importar dados da amostra harmonizada
+```{r}
+library(readxl)
+amostra_harmonizada_tbl <- read_excel("shiny_app/00_data/amostra_harmonizada_v3.xls")
+
+View(amostra_harmonizada_tbl)
+
+# amostra_harmonizada_tbl %>% glimpse()
+```
+
+
+### 2.2 Juntar as tabelas da seccao G e Amostra Harmonizada
+```{r}
+# Joining tables
+
+amostra_modificada_tbl <- amostra_harmonizada_tbl[ , 2:12]
+
+amostra_modificada_tbl <- amostra_modificada_tbl %>% unique()
+
+amostra_modificada_tbl$provincia <- factor(amostra_modificada_tbl$provincia, levels = c("Niassa", "Cabo Delgado", "Nampula", "Zambezia", "Tete", "Manica", "Sofala", "Inhambane", "Gaza", "Maputo Provincia"))
+
+
+ibsa_sec_g_joined_tbl <-
+    ibsa_sec_g_dat %>%
+    left_join(amostra_modificada_tbl,
+              by = c("upa" = "ibsa_id"))
+
+ibsa_sec_g_joined_tbl %>% glimpse()
+```
+
+## 3.0 Manipulacao de Dados
+```{r}
+library(labelled)
+
+producao_provincia_tbl <- 
+ibsa_sec_g_joined_tbl %>% 
+    group_by(PROVINCIA = to_factor(prov), tipo_cultura = g00) %>% 
+    summarise(total_qnt_kg = sum(qntkg, na.rm = TRUE)) %>% 
+    ungroup()
+
+producao_provincia_tbl %>% glimpse()
+```
+
+Tipos de culturas na Seccao G
+```{r}
+producao_provincia_tbl$tipo_cultura %>% unique()
+```
+
+
+### 3.1 Validar os nomes das Provincias
+
+Verificar se ha correspondencia nos nomes das provincias entre as tabelas **producao_provincia_tbl e moz_province(shapefiles) **
+
+```{r}
+is.element(producao_provincia_tbl$PROVINCIA, moz_province$PROVINCIA) %>% 
+    all()
+```
+O output (FALSE) mostra que ha alguns nomes que nao sao correspondentes. Portanto, vamos verificar os respectivos nomes nas tabelas.
+
+producao_provincia_tbl
+```{r}
+unique(producao_provincia_tbl$PROVINCIA)
+```
+
+```{r}
+moz_province$PROVINCIA %>% unique()
+```
+
+Nota-se que ha diferenca em: CABO DELGADO e MAPUTO PROVINCIA. Portanto, vamos renomear-los para fazermos a juncao entre as tabelas.
+
+```{r}
+# rename all levels
+levels(producao_provincia_tbl$PROVINCIA) <- c("NIASSA", "CABO_DELGADO", "NAMPULA", "ZAMBEZIA", "TETE", "MANICA", "SOFALA", "INHAMBANE", "GAZA", "MAPUTO")
+```
+
+Voltamos a validar se ha correspondencia entre as tabelas.
+```{r}
+is.element(producao_provincia_tbl$PROVINCIA, moz_province$PROVINCIA) %>% 
+    all()
+```
+
+O output mostra que existe correspondencia entre os nomes das provincias entre as tabelas.
+
+
+### 3.2 Criar tabelas por tipo de culturas
+
+```{r}
+# tipo de culturas por provincia
+tipo_producao_provincia_tbl <- producao_provincia_tbl[producao_provincia_tbl$tipo_cultura == "MILHO", ] 
+
+tipo_producao_provincia_tbl %>% glimpse()
+```
+
+
+
+### 3.3 Juncao entre shapefiles e dados de producao por tipo de cultura
+```{r}
+tipo_producao_provincia_merged_tbl <- merge(moz_province, tipo_producao_provincia_tbl, by = "PROVINCIA", all.x = F)
+
+tipo_producao_provincia_merged_tbl %>% glimpse()
+```
+
+
+## 4.0 Visualizar Mapas por Provincia
+
+
+Opcao 1:
+```{r}
+# Creating a color palette based on the number range in the total column
+pal <- colorNumeric("Blues", domain=tipo_producao_provincia_merged_tbl$total_qnt_kg)
+# pal <- colorNumeric("Greens", domain=tipo_producao_provincia_merged_tbl$total_qnt_kg)
+
+
+# province
+m <- leaflet() %>% 
+    #addProviderTiles(providers$Stamen.Toner) %>% 
+    addProviderTiles(providers$CartoDB.PositronNoLabels)  %>%
+    setView(lng = 35.529562, lat = -18.665695, zoom = 4) %>% 
+    addPolygons(data = moz_province,
+                # color = "#660000",
+                fillColor = ~pal(tipo_producao_provincia_merged_tbl$total_qnt_kg), 
+                weight = 1,
+                smoothFactor = 0.5,
+                fillOpacity = 0.7
+                )
+
+m
+```
+
+Opcao 2:
+```{r}
+
+### Create five colors for fill
+pal <- colorQuantile(palette = "RdYlBu", domain =tipo_producao_provincia_merged_tbl$total_qnt_kg, n = 5, reverse = TRUE)
+
+# pal <- colorQuantile(palette = "YlOrRd", domain =tipo_producao_provincia_merged_tbl$total_qnt_kg, n = 5, reverse = TRUE)
+
+
+# province
+m <- leaflet() %>% 
+    #addProviderTiles(providers$Stamen.Toner) %>% 
+    addProviderTiles(providers$CartoDB.PositronNoLabels)  %>%
+    setView(lng = 35.529562, lat = -18.665695, zoom = 4) %>% 
+    addPolygons(data = moz_province,
+                # color = "#660000",
+                fillColor = ~pal(tipo_producao_provincia_merged_tbl$total_qnt_kg), 
+                weight = 1,
+                smoothFactor = 0.5,
+                fillOpacity = 0.7
+               )
+
+m
+```
+
+
+Opcao 3:
+```{r}
+paletteNum <- colorNumeric('Blues', domain = tipo_producao_provincia_merged_tbl$total_qnt_kg)
+
+# paletteNum <- colorNumeric('Greens', domain = tipo_producao_provincia_merged_tbl$total_qnt_kg)
+
+
+# labels
+producao_Labels <- sprintf('<b>%s</b><br/>%s kg<br/>%s',
+                           tipo_producao_provincia_merged_tbl$PROVINCIA, 
+                           prettyNum(round(tipo_producao_provincia_merged_tbl$total_qnt_kg, 2),big.mark = ","),
+                           tipo_producao_provincia_merged_tbl$tipo_cultura) %>%
+    lapply(function(x) HTML(x))
+
+
+
+
+m <- leaflet() %>%
+    addProviderTiles(providers$CartoDB.PositronNoLabels)  %>%
+    # addProviderTiles(providers$Stamen.Toner) %>% 
+    setView(lng = 35.529562, lat = -18.665695, zoom = 4) %>% 
+    addPolygons(data = tipo_producao_provincia_merged_tbl,
+                
+                # state border stroke color
+                # color = 'white', 
+                color = "#660000",
+                
+                # soften the weight of the state borders
+                weight = 1, 
+                
+                # values >1 simplify the polygons' lines for less detail but faster loading
+                smoothFactor = .3, 
+                
+                # set opacity of polygons
+                fillOpacity = .75, 
+                
+                # specify that the each state should be colored per paletteNum()
+                fillColor = ~paletteNum(tipo_producao_provincia_merged_tbl$total_qnt_kg),
+                
+                
+                # label = mylabels,
+                label = producao_Labels,
+                
+                labelOptions = labelOptions(
+                    style = list(color = 'gray30'),
+                    textsize = '12px'),
+                highlightOptions = highlightOptions(
+                    weight = 3,
+                    color = 'dodgerblue')
+                ) %>% 
+    addLegend(pal = paletteNum, values = tipo_producao_provincia_merged_tbl$total_qnt_kg, title = '<small>Campanha Agricola 2020: Producao de XYZ <br>(kg| fonte: IAI 2020)</small>', position = 'topright')
+    
+
+m
+```
+
+Opcao 4:
+```{r}
+# using Bins
+# range(tipo_producao_provincia_merged_tbl$total_qnt_kg)
+Bins <- c(0, 500000, 1000000, 1500000, 2000000, Inf)
+paletteBinned <- colorBin('YlGnBu', domain = tipo_producao_provincia_merged_tbl$total_qnt_kg, bins = Bins)
+# paletteBinned <- colorBin('YlOrRd', domain = tipo_producao_provincia_merged_tbl$total_qnt_kg, bins = Bins)
+
+m <- leaflet() %>%
+    addProviderTiles(providers$CartoDB.PositronNoLabels)  %>%
+    # addProviderTiles(providers$Stamen.Toner) %>% 
+    setView(lng = 35.529562, lat = -18.665695, zoom = 4) %>% 
+    addPolygons(data = tipo_producao_provincia_merged_tbl,
+                
+                # state border stroke color
+                color = 'white', 
+                
+                # soften the weight of the state borders
+                weight = 1, 
+                
+                # values >1 simplify the polygons' lines for less detail but faster loading
+                smoothFactor = .3, 
+                
+                # set opacity of polygons
+                fillOpacity = .75, 
+                
+                # specify that the each state should be colored per paletteNum()
+                fillColor = ~paletteBinned(tipo_producao_provincia_merged_tbl$total_qnt_kg),
+                
+                # label = mylabels,
+                label = producao_Labels,
+                
+                labelOptions = labelOptions(
+                    style = list(color = 'gray30'),
+                    textsize = '12px'),
+                highlightOptions = highlightOptions(
+                    weight = 3,
+                    color = 'dodgerblue')
+                ) %>% 
+    addLegend(pal = paletteBinned , values = tipo_producao_provincia_merged_tbl$total_qnt_kg, title = '<small>Campanha Agricola 2020: Producao de XYZ<br>(kg| fonte: IAI 2020)</small>', position = 'topright')
+
+m
+
+```
+
+
+## 5.0 Mapeamento por Distrito
+
+Producao por distrito por tipo de culturas
+```{r}
+producao_distrito_tbl <- 
+    ibsa_sec_g_joined_tbl %>% 
+    group_by(PROVINCIA = to_factor(prov), DISTRITO = toupper(distrito), tipo_cultura = g00) %>% 
+    summarise(total_qnt_kg = sum(qntkg, na.rm = TRUE)) %>%
+    ungroup()
+
+producao_distrito_tbl %>% glimpse()
+
+
+```
+
+Converter o tipo de dados
+```{r}
+producao_distrito_tbl$DISTRITO <- as.factor(as.character(producao_distrito_tbl$DISTRITO))
+
+producao_distrito_tbl %>% glimpse()
+```
+
+
+### 5.1 Agrupar os dados por tipo de culturas e por distrito
+```{r}
+# split por culturas
+tipo_producao_distrito_tbl <- producao_distrito_tbl[ producao_distrito_tbl$tipo_cultura == "MILHO", ]
+
+tipo_producao_distrito_tbl %>% glimpse()
+
+```
+
+
+Verificar se ha correspondencia entre os nomes dos distritos do Shapefiles e da Amostra harmonizada
+```{r}
+# check if their matches
+is.element(tipo_producao_distrito_tbl$DISTRITO, moz_district$DISTRITO) %>% 
+    all()
+```
+
+
+```{r}
+tipo_producao_distrito_merged_tbl <- merge(moz_district, tipo_producao_distrito_tbl, by.x = c("DISTRITO", "FIRST_PROV"), by.y = c("DISTRITO", "PROVINCIA"))
+
+tipo_producao_distrito_merged_tbl %>% glimpse()
+```
+
+Visualizar mapa por distrito
+```{r}
+# using Bins
+# range(tipo_producao_distrito_merged_tbl$total_qnt_kg, na.rm = T)
+Bins <- c(0, 50000, 100000, 150000, 200000, Inf)
+paletteBinned <- colorBin('YlGnBu', domain = tipo_producao_distrito_merged_tbl$total_qnt_kg, bins = Bins)
+# paletteBinned <- colorBin('YlOrRd', domain = tipo_producao_provincia_merged_tbl$total_qnt_kg, bins = Bins)
+
+
+producao_Labels <- sprintf('<b>%s</b><br/>%s kg<br/>%s',
+                           tipo_producao_distrito_merged_tbl$DISTRITO, 
+                           prettyNum(round(tipo_producao_distrito_merged_tbl$total_qnt_kg, 2),big.mark = ","),
+                           tipo_producao_distrito_merged_tbl$tipo_cultura) %>%
+    lapply(htmltools::HTML)
+
+
+m <- leaflet() %>%
+    addProviderTiles(providers$CartoDB.PositronNoLabels)  %>%
+    # addProviderTiles(providers$Stamen.Toner) %>% 
+    setView(lng = 35.529562, lat = -18.665695, zoom = 4) %>% 
+    addPolygons(data = tipo_producao_distrito_merged_tbl,
+                
+                # state border stroke color
+                color = 'white', 
+                
+                # soften the weight of the state borders
+                weight = 1, 
+                
+                # values >1 simplify the polygons' lines for less detail but faster loading
+                smoothFactor = .3, 
+                
+                # set opacity of polygons
+                fillOpacity = .75, 
+                
+                # specify that the each state should be colored per paletteNum()
+                fillColor = ~paletteBinned(tipo_producao_distrito_merged_tbl$total_qnt_kg),
+                
+                # label = mylabels,
+                label = producao_Labels,
+                
+                labelOptions = labelOptions(
+                    style = list(color = 'gray30'),
+                    textsize = '12px'),
+                highlightOptions = highlightOptions(
+                    weight = 3,
+                    color = 'dodgerblue')
+                ) %>% 
+    addLegend(pal = paletteBinned , values = tipo_producao_distrito_merged_tbl$total_qnt_kg, title = '<small>Campanha Agricola 2020: Producao de XYZ<br>(kg| fonte: IAI 2020)</small>', position = 'topright')
+
+m
+```
+
+
+

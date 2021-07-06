@@ -319,13 +319,27 @@ apex(
     type = "bar",
     aes(x = provincia, y = percent)
 ) %>%
-    ax_title(text = "Performance: número de AE's listadas vs número de AE's planificadas") %>%
+  ax_title(text = "Performance: número de AE's listadas vs número de AE's planificadas") %>%
     ax_subtitle(text = "IAI 2020") %>%
   ax_dataLabels(enabled = TRUE) %>% 
   ax_xaxis(title = list(text = "Percentagem de Execução (%)"))
     # ax_dataLabels(enabled = TRUE, dropShadow(enabled=TRUE))
 
-    
+
+# Comparação com a Média Geral
+apex(
+  data = performance_tbl,
+  type = "column",
+  aes(x = provincia, y = percent)
+) %>%
+  add_hline(value = mean(performance_tbl$percent),
+            label = "Média Geral",
+            dash = 2) %>% 
+  ax_title(text = "Performance: número de AE's listadas vs número de AE's planificadas") %>%
+  ax_subtitle(text = "IAI 2020") %>%
+  ax_dataLabels(enabled = TRUE) %>% 
+  ax_xaxis(title = list(text = "Percentagem de Execução (%)"))
+# ax_dataLabels(enabled = TRUE, dropShadow(enabled=TRUE))
 
 
 apex(data = performance_tbl, type = "column", aes(x = provincia, y = no_AE_listada, fill = no_AE_planificada ))
@@ -341,7 +355,7 @@ listagem_help_tbl <-
 
 
 listagem_help_tbl %>% 
-    filter(PROV == 5) %>% 
+    filter(PROV == 10) %>% 
     distinct(PROV, LI_IAIID) %>% 
     arrange(LI_IAIID) %>% 
     select (PROV, IBSA_ID = LI_IAIID)
