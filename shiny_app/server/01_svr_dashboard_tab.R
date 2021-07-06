@@ -98,7 +98,7 @@ output$dt_tabela_performance <- renderDataTable({
     
     
     
-    datatable(upa_entrevistas_performance_tbl[ order(upa_entrevistas_performance_tbl$percent, decreasing = TRUE), ]) %>%
+    datatable(upa_entrevistas_performance_tbl[ order(upa_entrevistas_performance_tbl$percent, decreasing = TRUE), ], colnames = c('provincia', 'AE_entrev.', 'AE_planificada', 'percent'), rownames = FALSE) %>%
         formatStyle(
             columns = "percent",
             background = styleColorBar(range(upa_entrevistas_performance_tbl$percent), 'lightblue'),
@@ -171,7 +171,7 @@ output$plot_apex_daily_interview_all_country <- renderApexchart({
     
     apex(plot_country_tbl, aes(x =created_at, y= total_entrevistas), "column", height = "400px") %>% 
         # ax_dataLabels(enabled = TRUE, dropShadow = TRUE) %>%
-        ax_dataLabels(enabled = TRUE) %>% 
+        # ax_dataLabels(enabled = TRUE) %>% 
         ax_title(text = "No. diario de Entrevistas em todo Pais") %>%
         ax_subtitle(text = "IAI 2020") %>%
         ax_xaxis(title = list(text = "Data")) %>% 
@@ -408,8 +408,17 @@ output$dashboard_UI <- renderUI({
     tagList(
         
        
-        
-        h5(strong("Seccao A - Identificacao da Exploracao")),
+        fluidRow(
+            column(
+                width = 6,
+                h5(strong("Seccao A - Identificacao da Exploracao"))
+            ),
+            
+            column(
+                width = 6,
+                h5(paste("Ultima actualizacao em:", max(ibsa_sec_a_dat$a10)))
+            )
+        ),
         # br(),
         
         

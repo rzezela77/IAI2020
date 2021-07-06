@@ -32,7 +32,7 @@ get_plot_apex_daily_interview <- function(provincia) {
             ) %>%
             # ax_title(text = "No. diario de Entrevistas em todo Pais") %>% 
             # ax_dataLabels(enabled = TRUE, dropShadow = TRUE) %>%
-            ax_dataLabels(enabled = TRUE) %>%
+            # ax_dataLabels(enabled = TRUE) %>%
             add_hline(
                 value = mean(plot_country_tbl$total_entrevistas),
                 label = "Media diaria",
@@ -53,7 +53,7 @@ get_plot_apex_daily_interview <- function(provincia) {
                  height = "400px") %>%
             # ax_title(text = paste("No. diario de Entrevistas:", v_provincia)) %>% 
             # ax_dataLabels(enabled = TRUE, dropShadow = TRUE) %>%
-            ax_dataLabels(enabled = TRUE) %>%
+            # ax_dataLabels(enabled = TRUE) %>%
             add_hline(
                 value = mean(plot_data$no_entrevistas),
                 label = "Media diaria",

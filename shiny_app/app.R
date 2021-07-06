@@ -17,13 +17,14 @@ library(tidyverse)
 
 
 
-source(file = "~/projects/IAI2020/shiny_app/global.R", local = TRUE)
-source(file = "~/projects/IAI2020/shiny_app/get_functions.R", local = TRUE)
+source(file = "global.R", local = TRUE)
+source(file = "get_functions.R", local = TRUE)
 # 
 # # elements
-source(file = "~/projects/IAI2020/shiny_app/ui/dashboard_tab.R", local = TRUE)
-source(file = "~/projects/IAI2020/shiny_app/ui/grandes_exploracoes_tab.R", local = TRUE)
-source(file = "~/projects/IAI2020/shiny_app/ui/producao_tab.R", local = TRUE)
+source(file = "ui/dashboard_tab.R", local = TRUE)
+source(file = "ui/grandes_exploracoes_tab.R", local = TRUE)
+source(file = "ui/producao_tab.R", local = TRUE)
+source(file = "ui/mapa_tab.R", local = TRUE)
 # source(file = "ui/map_tab.R", local = TRUE)
 
 
@@ -54,6 +55,11 @@ shiny::shinyApp(
                     icon = "box",
                     "Produção"
                 )
+                ,tablerNavMenuItem(
+                    tabName = "mapa",
+                    icon = "box",
+                    "Mapa"
+                )
             )
         ),
         
@@ -82,12 +88,8 @@ shiny::shinyApp(
             tablerTabItems(
                 dashboard_tab,
                 grandes_exploracoes_tab,
-                producao_tab
-                # ,customer_segmentation_tab
-                # retencao_clientes_tab,
-                # facturacao_tab,
-                # recarregamentos_tab,
-                # campanhas_tab
+                producao_tab,
+                mapa_tab
             )
         )
     ),
@@ -95,9 +97,7 @@ shiny::shinyApp(
     server = function(input, output) {
         
         source(file = "server/01_svr_dashboard_tab.R", local = TRUE)
-
-        # # source(file = "server/02_svr_customer_segmentation_tab.R", local = TRUE)
-        # 
-        # # source(file = "server/03_svr_map_tab.R", local = TRUE)
+        
+        source(file = "server/04_svr_mapa_tab.R", local = TRUE)
     }
 )

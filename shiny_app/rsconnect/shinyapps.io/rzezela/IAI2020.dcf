@@ -1,0 +1,12 @@
+name: IAI2020
+title: IAI2020
+username:
+account: rzezela
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 3913998
+bundleId: 4534539
+url: https://rzezela.shinyapps.io/IAI2020/
+when: 1619690296.15819
+asMultiple: FALSE
+asStatic: FALSE
